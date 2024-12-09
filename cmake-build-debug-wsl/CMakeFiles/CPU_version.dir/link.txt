@@ -1,0 +1,1 @@
+/usr/bin/c++ -g CMakeFiles/CPU_version.dir/bfgs.cpp.o -o CPU_version 

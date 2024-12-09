@@ -1,0 +1,12 @@
+"C:\Program Files\JetBrains\CLion 2024.2.3\bin\cmake\win\x64\bin\cmake.exe" -DCMAKE_BUILD_TYPE=Debug -S C:\Users\matte\CLionProjects\BFS -B C:\Users\matte\CLionProjects\BFS\cmake-build-debug
+CMake Error at CMakeLists.txt:8 (project):
+  Running
+
+   'nmake' '-?'
+
+  failed with:
+
+   no such file or directory
+
+
+-- Configuring incomplete, errors occurred!
