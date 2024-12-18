@@ -8,7 +8,7 @@
 #include <time.h>
 #include <vector>
 
-#define MAX_FRONTIER_SIZE 128
+#define MAX_FRONTIER_SIZE 300 //before it was 128
 
 #define CHECK(call)                                                                 \
   {                                                                                 \
@@ -28,13 +28,87 @@
     }                                                                               \
   }
 
-//void read_matrix(std::vector<int> &row_ptr,
-//                 std::vector<int> &col_ind,
-//                 std::vector<float> &values,
-//                 const std::string &filename,
-//                 int &num_rows,
-//                 int &num_cols,
-//                 int &num_vals);
+void read_matrix(std::vector<int> &row_ptr,
+                 std::vector<int> &col_ind,
+                 std::vector<float> &values,
+                 const std::string &filename,
+                 int &num_rows,
+                 int &num_cols,
+                 int &num_vals);
+
+void insertIntoFrontier(int val, int *frontier, int *frontier_size) {
+    frontier[*frontier_size] = val;
+    *frontier_size           = *frontier_size + 1;
+}
+
+inline void swap(int **ptr1, int **ptr2) {
+    int *tmp = *ptr1;
+    *ptr1    = *ptr2;
+    *ptr2    = tmp;
+}
+
+void BFS_sequential(const int source, const int *rowPointers, const int *destinations, int *distances) {
+    int **frontiers = (int **) malloc(2 * sizeof(int *)); // frontiers is an array of pointers to arrays of integers
+    for (int i = 0; i < 2; i++) frontiers[i] = (int *) calloc(MAX_FRONTIER_SIZE, sizeof(int)); // initializes two arrays of zeros and length MAX_FRONTIER_SIZE
+    int *currentFrontier     = frontiers[0];
+    int currentFrontierSize  = 0;
+    int *previousFrontier    = frontiers[1];
+    int previousFrontierSize = 0;
+    insertIntoFrontier(source, previousFrontier, &previousFrontierSize);
+    distances[source] = 0;
+    while (previousFrontierSize > 0) {
+        // visit all vertices on the previous frontier
+        for (int f = 0; f < previousFrontierSize; f++) {
+            const int currentVertex = previousFrontier[f];
+            printf("\nProcessing vertex: %d\n", currentVertex);
+            // check all outgoing edges
+            // rowPointers[currentVertex] and rowPointers[currentVertex + 1] delimit the number of outgoing edges for currentVertex
+            for (int i = rowPointers[currentVertex]; i < rowPointers[currentVertex + 1]; ++i) {
+                printf("Processing edge: %d -> %d\n", currentVertex, destinations[i]);
+                if (distances[destinations[i]] == -1) {
+                    // this vertex has not been visited yet, then add it to currentFrontier
+                    printf("Visiting vertex: %d\n", destinations[i]);
+                    insertIntoFrontier(destinations[i], currentFrontier, &currentFrontierSize);
+                    distances[destinations[i]] = distances[currentVertex] + 1;
+                }
+            }
+        }
+        swap(&currentFrontier, &previousFrontier);
+        previousFrontierSize = currentFrontierSize;
+        currentFrontierSize  = 0;
+    }
+}
+
+int main(int argc, char *argv[]) {
+    if (argc != 3) {
+        printf("Usage: ./exec matrix_file source\n");
+        return 0;
+    } // checks if the number of arguments passed is correct, otherwise returns an error message
+
+    std::vector<int> row_ptr;
+    std::vector<int> col_ind;
+    std::vector<float> values;
+    int num_rows, num_cols, num_vals;
+
+    const std::string filename{argv[1]}; // argv[1] is the name of the file passed
+    // The node starts from 1 but array starts from 0
+    const int source = atoi(argv[2]) - 1; // source is the starting point of the algorithm (zero-indexed)
+
+    read_matrix(row_ptr, col_ind, values, filename, num_rows, num_cols, num_vals);
+
+    // Initialize dist to -1
+    std::vector<int> dist(num_rows); //before it was num_vals
+    for (int i = 0; i < num_rows; i++) { dist[i] = -1; }
+    // Compute in sw
+    BFS_sequential(source, row_ptr.data(), col_ind.data(), dist.data()); // .data() returns a pointer to the first element
+    // of the array
+    printf("\nFinal distances:\n");
+    for (int i=0; i<num_rows; i++) {
+        printf("%d ", dist[i]);
+    }
+
+    return EXIT_SUCCESS;
+}
 
 // Reads a sparse matrix and represents it using CSR (Compressed Sparse Row) format
 void read_matrix(std::vector<int> &row_ptr, // row_ptr will get filled with the row indexes of the array value
@@ -52,7 +126,7 @@ void read_matrix(std::vector<int> &row_ptr, // row_ptr will get filled with the 
     }
 
     // Get number of rows, columns, and non-zero values
-    file >> num_rows >> num_cols >> num_vals; // these values are in the first row of the file
+    file >> num_rows >> num_cols >> num_vals;// these values are in the first row of the file
 
     row_ptr.resize(num_rows + 1); // changing the size of the arrays
     col_ind.resize(num_vals);
@@ -100,74 +174,3 @@ void read_matrix(std::vector<int> &row_ptr, // row_ptr will get filled with the 
         i                         = 0;
     }
 }
-
-
-
-void insertIntoFrontier(int val, int *frontier, int *frontier_size) {
-  frontier[*frontier_size] = val;
-  *frontier_size           = *frontier_size + 1;
-}
-
-inline void swap(int **ptr1, int **ptr2) {
-  int *tmp = *ptr1;
-  *ptr1    = *ptr2;
-  *ptr2    = tmp;
-}
-
-void BFS_sequential(const int source, const int *rowPointers, const int *destinations, int *distances) {
-  int **frontiers = (int **) malloc(2 * sizeof(int *)); // frontiers is an array of pointers to arrays of integers
-  for (int i = 0; i < 2; i++)
-      frontiers[i] = (int *) calloc(MAX_FRONTIER_SIZE, sizeof(int)); // initializes two arrays of zeros and length MAX_FRONTIER_SIZE
-  int *currentFrontier     = frontiers[0];
-  int currentFrontierSize  = 0;
-  int *previousFrontier    = frontiers[1];
-  int previousFrontierSize = 0;
-  insertIntoFrontier(source, previousFrontier, &previousFrontierSize);
-  distances[source] = 0;
-  while (previousFrontierSize > 0) {
-    // visit all vertices on the previous frontier
-    for (int f = 0; f < previousFrontierSize; f++) {
-      const int currentVertex = previousFrontier[f];
-      // check all outgoing edges
-      for (int i = rowPointers[currentVertex]; i < rowPointers[currentVertex + 1]; ++i) {
-        if (distances[destinations[i]] == -1) {
-          // this vertex has not been visited yet
-          insertIntoFrontier(destinations[i], currentFrontier, &currentFrontierSize);
-          distances[destinations[i]] = distances[currentVertex] + 1;
-        }
-      }
-    }
-    swap(&currentFrontier, &previousFrontier);
-    previousFrontierSize = currentFrontierSize;
-    currentFrontierSize  = 0;
-  }
-}
-
-int main(int argc, char *argv[]) {
-  if (argc != 3) {
-    printf("Usage: ./exec matrix_file source\n");
-    return 0;
-  } // checks if the number of arguments passed is correct, otherwise returns an error message
-
-  std::vector<int> row_ptr;
-  std::vector<int> col_ind;
-  std::vector<float> values;
-  int num_rows, num_cols, num_vals;
-
-  const std::string filename{argv[1]}; // argv[1] is the name of the file passed
-  // The node starts from 1 but array starts from 0
-  const int source = atoi(argv[2]) - 1; // source is the starting point of the algorithm (zero-indexed)
-
-  read_matrix(row_ptr, col_ind, values, filename, num_rows, num_cols, num_vals);
-
-  // Initialize dist to -1
-  std::vector<int> dist(num_vals);
-  for (int i = 0; i < num_vals; i++) { dist[i] = -1; }
-  // Compute in sw
-  BFS_sequential(source, row_ptr.data(), col_ind.data(), dist.data()); // .data() returns a pointer to the first element
-  // of the array
-
-
-  return EXIT_SUCCESS;
-}
-
