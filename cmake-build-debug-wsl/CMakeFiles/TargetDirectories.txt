@@ -1,4 +1,5 @@
 /mnt/c/Users/matte/CLionProjects/BFS/cmake-build-debug-wsl/CMakeFiles/BFS.dir
 /mnt/c/Users/matte/CLionProjects/BFS/cmake-build-debug-wsl/CMakeFiles/CPU_version.dir
+/mnt/c/Users/matte/CLionProjects/BFS/cmake-build-debug-wsl/CMakeFiles/CUDA_debugger.dir
 /mnt/c/Users/matte/CLionProjects/BFS/cmake-build-debug-wsl/CMakeFiles/edit_cache.dir
 /mnt/c/Users/matte/CLionProjects/BFS/cmake-build-debug-wsl/CMakeFiles/rebuild_cache.dir

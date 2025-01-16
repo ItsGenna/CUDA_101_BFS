@@ -46,4 +46,5 @@ set(CMAKE_MAKEFILE_PRODUCTS
 set(CMAKE_DEPEND_INFO_FILES
   "CMakeFiles/BFS.dir/DependInfo.cmake"
   "CMakeFiles/CPU_version.dir/DependInfo.cmake"
+  "CMakeFiles/CUDA_debugger.dir/DependInfo.cmake"
   )

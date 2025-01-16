@@ -64,13 +64,17 @@ void BFS_sequential(const int source, const int *rowPointers, const int *destina
             // check all outgoing edges
             // rowPointers[currentVertex] and rowPointers[currentVertex + 1] delimit the number of outgoing edges for currentVertex
             for (int i = rowPointers[currentVertex]; i < rowPointers[currentVertex + 1]; ++i) {
-                printf("Processing edge: %d -> %d\n", currentVertex, destinations[i]);
+                printf("Processing edge: %d -> %d, i = %d\n", currentVertex, destinations[i], i);
                 if (distances[destinations[i]] == -1) {
                     // this vertex has not been visited yet, then add it to currentFrontier
                     printf("Visiting vertex: %d\n", destinations[i]);
                     insertIntoFrontier(destinations[i], currentFrontier, &currentFrontierSize);
                     distances[destinations[i]] = distances[currentVertex] + 1;
                 }
+            }
+            printf("\nCurrent frontier:");
+            for (int i = 0; i<currentFrontierSize; i++){
+                printf(" %d,", currentFrontier[i]);
             }
         }
         swap(&currentFrontier, &previousFrontier);
@@ -97,6 +101,7 @@ int main(int argc, char *argv[]) {
     read_matrix(row_ptr, col_ind, values, filename, num_rows, num_cols, num_vals);
 
     // Initialize dist to -1
+    printf("NUM COLS: %d", num_cols);
     std::vector<int> dist(num_rows); //before it was num_vals
     for (int i = 0; i < num_rows; i++) { dist[i] = -1; }
     // Compute in sw
