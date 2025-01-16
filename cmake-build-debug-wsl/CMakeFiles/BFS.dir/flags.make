@@ -6,5 +6,5 @@ CUDA_DEFINES =
 
 CUDA_INCLUDES = 
 
-CUDA_FLAGS =  -Xlinker=-rpath,/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu -g -std=c++20 "--generate-code=arch=compute_52,code=[compute_52,sm_52]"
+CUDA_FLAGS =  -G -g -g -std=c++20 "--generate-code=arch=compute_52,code=[compute_52,sm_52]"
 

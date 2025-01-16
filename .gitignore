@@ -40,5 +40,10 @@
 # Ignore home directory files
 ../../*
 
-# Add specific exclusions as needed
-!/path/to/your/project/
+# Build folders
+/cmake-build-*/
+
+# CLion configurations
+.idea/
+*.iml
+

@@ -1,4 +1,8 @@
 /usr/bin/cmake -DCMAKE_BUILD_TYPE=Debug -G "Unix Makefiles" -S /mnt/c/Users/matte/CLionProjects/BFS -B /mnt/c/Users/matte/CLionProjects/BFS/cmake-build-debug-wsl
--- Configuring done (0.0s)
--- Generating done (0.2s)
+-- Debugging enabled for main
+-- CMake Version: 3.28.3
+-- Build Type: Debug
+-- CUDA Flags:  -G -g
+-- Configuring done (0.1s)
+-- Generating done (0.4s)
 -- Build files have been written to: /mnt/c/Users/matte/CLionProjects/BFS/cmake-build-debug-wsl

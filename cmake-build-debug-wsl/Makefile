@@ -142,6 +142,19 @@ CPU_version/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/CPU_version.dir/build.make CMakeFiles/CPU_version.dir/build
 .PHONY : CPU_version/fast
 
+#=============================================================================
+# Target rules for targets named CUDA_debugger
+
+# Build rule for target.
+CUDA_debugger: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CUDA_debugger
+.PHONY : CUDA_debugger
+
+# fast build rule for target.
+CUDA_debugger/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CUDA_debugger.dir/build.make CMakeFiles/CUDA_debugger.dir/build
+.PHONY : CUDA_debugger/fast
+
 bfgs.o: bfgs.cpp.o
 .PHONY : bfgs.o
 
@@ -172,6 +185,7 @@ main.o: main.cu.o
 # target to build an object file
 main.cu.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/BFS.dir/build.make CMakeFiles/BFS.dir/main.cu.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CUDA_debugger.dir/build.make CMakeFiles/CUDA_debugger.dir/main.cu.o
 .PHONY : main.cu.o
 
 main.i: main.cu.i
@@ -180,6 +194,7 @@ main.i: main.cu.i
 # target to preprocess a source file
 main.cu.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/BFS.dir/build.make CMakeFiles/BFS.dir/main.cu.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CUDA_debugger.dir/build.make CMakeFiles/CUDA_debugger.dir/main.cu.i
 .PHONY : main.cu.i
 
 main.s: main.cu.s
@@ -188,6 +203,7 @@ main.s: main.cu.s
 # target to generate assembly for a file
 main.cu.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/BFS.dir/build.make CMakeFiles/BFS.dir/main.cu.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/CUDA_debugger.dir/build.make CMakeFiles/CUDA_debugger.dir/main.cu.s
 .PHONY : main.cu.s
 
 # Help Target
@@ -200,6 +216,7 @@ help:
 	@echo "... rebuild_cache"
 	@echo "... BFS"
 	@echo "... CPU_version"
+	@echo "... CUDA_debugger"
 	@echo "... bfgs.o"
 	@echo "... bfgs.i"
 	@echo "... bfgs.s"
