@@ -1,6 +1,0 @@
-/usr/bin/cmake -DCMAKE_BUILD_TYPE=Release -G "Unix Makefiles" -S /mnt/c/Users/matte/CLionProjects/BFS -B /mnt/c/Users/matte/CLionProjects/BFS/cmake-build-release-wsl
-CMake Error at CMakeLists.txt:1 (cmake_minimum_required):
-  CMake 3.30 or higher is required.  You are running version 3.28.3
-
-
--- Configuring incomplete, errors occurred!
