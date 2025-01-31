@@ -35,57 +35,55 @@ __global__ void BFS_CUDA(const int* rowPointers_d, const int* destinations_d,
     extern __shared__ int shared_frontier[];  // Memoria condivisa per la frontiera locale
     __shared__ int shared_frontier_size;
 
-    // Inizializza la dimensione della frontiera locale
+    // initialize shared frontier size
     if (threadIdx.x == 0) {
         shared_frontier_size = 0;
     }
 
     __syncthreads();
 
-    // Calcola l'indice globale del thread
     unsigned int i = threadIdx.x + blockIdx.x * blockDim.x;
 
     if (i < dim) {
-        // Ottieni il vertice corrente dalla frontiera
+        // get current vertex
         int currentVertex = currentFrontier_d[i];
-        printf("Thread %d processing vertex %d\n", i, currentVertex);
+        // printf("Thread %d processing vertex %d\n", i, currentVertex); //debugging function
 
-        // Itera sui vicini del vertice corrente
+        // get start and end of the destinations
         int start = rowPointers_d[currentVertex];
         int end = rowPointers_d[currentVertex + 1];
 
         for (int j = start; j < end; ++j) {
             int neighbor = destinations_d[j];
-            printf("Thread %d processing edge %d -> %d, j = %d\n", i, currentVertex, neighbor, j);
+            //printf("Thread %d processing edge %d -> %d, j = %d\n", i, currentVertex, neighbor, j); //debugging function
 
-            // Aggiorna la distanza se il vicino non è ancora stato visitato
+            // check if it has already been visited and update the distance
             if (atomicCAS(&distances_d[neighbor], -1, distances_d[currentVertex] + 1) == -1) {
-                printf("Thread %d updating distance for vertex %d: %d\n", i, neighbor, distances_d[currentVertex] + 1);
+                //printf("Thread %d updating distance for vertex %d: %d\n", i, neighbor, distances_d[currentVertex] + 1); //debugging function
 
-                // Aggiungi il vicino alla frontiera locale
+                // if it is new, add neighbor to current frontier
                 int idx = atomicAdd(&shared_frontier_size, 1);
                 if (idx < max_frontier_size) {
                     shared_frontier[idx] = neighbor;
-                    printf("Thread %d added vertex %d to shared frontier at index %d\n", i, neighbor, idx);
+                    //printf("Thread %d added vertex %d to shared frontier at index %d\n", i, neighbor, idx); // debugging function
                 } else {
-                    printf("Thread %d could not add vertex %d to shared frontier (overflow)\n", i, neighbor);
+                    printf("Thread %d could not add vertex %d to shared frontier (overflow)\n", i, neighbor); // check for overflow
                 }
             }
         }
     }
-    __syncthreads();
 
-    // Scrivi la frontiera locale nella memoria globale
+    __syncthreads(); // wait for all the threads to finish computations
+
+    // update global memory frontier
     if (threadIdx.x == 0) {
         int global_idx = atomicExch(currentFrontierSize_d, shared_frontier_size);
-
-        // Copia i nuovi vertici nella frontiera globale, evitando overflow
         for (int j = 0; j < shared_frontier_size; ++j) {
             if (global_idx + j < max_frontier_size) {
                 currentFrontier_d[j] = shared_frontier[j];
-                printf("Block %d added vertex %d to global frontier at index %d\n", blockIdx.x, shared_frontier[j], j);
+                // printf("Block %d added vertex %d to global frontier at index %d\n", blockIdx.x, shared_frontier[j], j);
             } else {
-                printf("Block %d could not add vertex %d to global frontier (overflow)\n", blockIdx.x, shared_frontier[j]);
+                printf("Block %d could not add vertex %d to global frontier (overflow)\n", blockIdx.x, shared_frontier[j]); // debugging function
             }
         }
     }
@@ -116,39 +114,37 @@ void BFS_parallel(const int source, const int* rowPointers, const int* destinati
     int *currentFrontier_d, *currentFrontierSize_d;
     int *distances_d, *rowPointers_d, *destinations_d;
 
-    // Allocazione memoria device
+    // device memory allocation
     CHECK(cudaMalloc(&currentFrontier_d, MAX_FRONTIER_SIZE * sizeof(int)));
     CHECK(cudaMalloc(&currentFrontierSize_d, sizeof(int)));
     CHECK(cudaMalloc(&distances_d, num_rows * sizeof(int)));
     CHECK(cudaMalloc(&rowPointers_d, num_rows * sizeof(int)));
     CHECK(cudaMalloc(&destinations_d, num_vals * sizeof(int)));
 
-    // Inizializzazione distanze e frontiera
+    // Initialization
     int initialDistances[num_rows];
     for (int i = 0; i < num_rows; ++i) {
-        initialDistances[i] = -1;  // Inizializza tutte le distanze a -1
+        initialDistances[i] = -1;  // all the distances have to be -1
     }
-    initialDistances[source] = 0;  // Nodo sorgente a distanza 0
-    CHECK(cudaMemcpy(distances_d, initialDistances, num_rows * sizeof(int), cudaMemcpyHostToDevice));
+    initialDistances[source] = 0;  // except the starting value, which has to be 1
 
-    // Inizializza la frontiera
+    //copy to device memory
+    CHECK(cudaMemcpy(distances_d, initialDistances, num_rows * sizeof(int), cudaMemcpyHostToDevice));
     int initialFrontierSize = 1;
     CHECK(cudaMemcpy(currentFrontier_d, &source, sizeof(int), cudaMemcpyHostToDevice));
     CHECK(cudaMemcpy(currentFrontierSize_d, &initialFrontierSize, sizeof(int), cudaMemcpyHostToDevice));
-
-    // Copia dati su device
     CHECK(cudaMemcpy(rowPointers_d, rowPointers, num_rows * sizeof(int), cudaMemcpyHostToDevice));
     CHECK(cudaMemcpy(destinations_d, destinations, num_vals * sizeof(int), cudaMemcpyHostToDevice));
 
-    // Iterazione BFS
+
     while (initialFrontierSize > 0) {
         int blockDim = 256;
         int gridDim = (initialFrontierSize + blockDim - 1) / blockDim;
         int sharedMemSize = blockDim * sizeof(int);
 
-        cudaError_t err = cudaGetLastError();
-        if (err != cudaSuccess) {
-            printf("CUDA error before kernel launch: %s\n", cudaGetErrorString(err));
+        cudaError_t error_code = cudaGetLastError();
+        if (error_code != cudaSuccess) {
+            printf("CUDA error before kernel launch: %s\n", cudaGetErrorString(error_code));
         }
 
         BFS_CUDA<<<gridDim, blockDim, sharedMemSize>>>(rowPointers_d, destinations_d, distances_d,
@@ -156,9 +152,9 @@ void BFS_parallel(const int source, const int* rowPointers, const int* destinati
                                                        initialFrontierSize, MAX_FRONTIER_SIZE);
         CHECK_KERNELCALL();
 
-        err = cudaGetLastError();
-        if (err != cudaSuccess) {
-            printf("CUDA error after kernel launch: %s\n", cudaGetErrorString(err));
+        error_code = cudaGetLastError();
+        if (error_code != cudaSuccess) {
+            printf("CUDA error after kernel launch: %s\n", cudaGetErrorString(error_code));
         }
 
         // Aggiorna la dimensione della frontiera
@@ -167,11 +163,11 @@ void BFS_parallel(const int source, const int* rowPointers, const int* destinati
         // Debug: verificare la frontiera aggiornata
         int host_frontier[MAX_FRONTIER_SIZE];
         CHECK(cudaMemcpy(host_frontier, currentFrontier_d, MAX_FRONTIER_SIZE * sizeof(int), cudaMemcpyDeviceToHost));
-        printf("Updated frontier: ");
+        /*printf("Updated frontier: ");
         for (int i = 0; i < initialFrontierSize; ++i) {
             printf("%d ", host_frontier[i]);
         }
-        printf("\n");
+        printf("\n"); */
 
         // Reset dimensione frontiera per il prossimo passo
         CHECK(cudaMemset(currentFrontierSize_d, 0, sizeof(int)));
@@ -209,13 +205,21 @@ int main(int argc, char *argv[]) {
     // Initialize dist to -1
     std::vector<int> dist(num_rows); //before it was num_vals
     for (int i = 0; i < num_rows; i++) { dist[i] = -1; }
-    // Compute in sw
+
+    clock_t start, end;
+    start = clock();
+
     BFS_parallel(source, row_ptr.data(), col_ind.data(), dist.data(), num_rows, num_vals); // .data() returns a pointer to the first element
     // of the array
+
+    end = clock();
+
     printf("\nFinal distances:\n");
     for (int i=0; i<num_rows; i++) {
         printf("%d ", dist[i]);
     }
+
+    printf("\nTime elapsed: %f ms", float(end-start)*1000/CLOCKS_PER_SEC);
 
     return EXIT_SUCCESS;
 }
