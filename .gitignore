@@ -43,7 +43,7 @@
 # Build folders
 /cmake-build-*/
 /cmake-build-debug/
-cmake-build-release-wsl/
+/cmake-build-release-wsl/
 
 # CLion configurations
 .idea/
