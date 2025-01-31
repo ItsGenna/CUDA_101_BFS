@@ -45,6 +45,9 @@
 /cmake-build-debug/
 /cmake-build-release-wsl/
 
+# Cmake file
+CMakeLists.txt
+
 # CLion configurations
 .idea/
 *.iml
