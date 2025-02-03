@@ -7,6 +7,7 @@
 #include <sys/time.h>
 #include <time.h>
 #include <vector>
+#include <cuda_runtime.h>
 
 
 #define MAX_MATRIX_LENGTH 7500
@@ -31,10 +32,11 @@
   }
 
 __constant__ int destinations_constant[MAX_MATRIX_LENGTH];
+__constant__ int rowPointers_constant[MAX_MATRIX_LENGTH];
 
-__global__ void BFS_CUDA(const int* rowPointers_d,
-                         int* distances_d, int* currentFrontier_d, int* currentFrontierSize_d,
-                         int dim, int max_frontier_size) {
+
+
+__global__ void BFS_CUDA(int* distances_d, int* currentFrontier_d, int* currentFrontierSize_d, int dim) {
     extern __shared__ int shared_frontier[];  // extern because the dimension is defined in the kernel call
     __shared__ int shared_frontier_size;
 
@@ -53,8 +55,8 @@ __global__ void BFS_CUDA(const int* rowPointers_d,
         // printf("Thread %d processing vertex %d\n", i, currentVertex); //debugging function
 
         // get start and end of the destinations
-        int start = rowPointers_d[currentVertex];
-        int end = rowPointers_d[currentVertex + 1];
+        int start = rowPointers_constant[currentVertex];
+        int end = rowPointers_constant[currentVertex + 1];
 
         for (int j = start; j < end; ++j) {
             int neighbor = destinations_constant[j];
@@ -66,7 +68,7 @@ __global__ void BFS_CUDA(const int* rowPointers_d,
 
                 // if it is new, add neighbor to current frontier
                 int idx = atomicAdd(&shared_frontier_size, 1);
-                if (idx < max_frontier_size) {
+                if (idx < MAX_FRONTIER_SIZE) {
                     shared_frontier[idx] = neighbor;
                     // printf("Thread %d added vertex %d to shared frontier at index %d\n", i, neighbor, idx); // debugging function
                 } else {
@@ -82,7 +84,7 @@ __global__ void BFS_CUDA(const int* rowPointers_d,
     if (threadIdx.x == 0) {
         int global_idx = atomicExch(currentFrontierSize_d, shared_frontier_size); // updates the current frontier size and returns the previous size
         for (int j = 0; j < shared_frontier_size; ++j) {
-            if (global_idx + j < max_frontier_size) {
+            if (global_idx + j < MAX_FRONTIER_SIZE) {
                 currentFrontier_d[j] = shared_frontier[j];
                 // printf("Block %d added vertex %d to global frontier at index %d\n", blockIdx.x, shared_frontier[j], j);
             } else {
@@ -115,14 +117,12 @@ inline void swap(int **ptr1, int **ptr2) {
 void BFS_parallel(const int source, const int* rowPointers, const int* destinations,
                   int* distances, const int num_rows, int num_vals) {
     int *currentFrontier_d, *currentFrontierSize_d;
-    int *distances_d, *rowPointers_d;
+    int *distances_d;
 
     // device memory allocation
     CHECK(cudaMalloc(&currentFrontier_d, MAX_FRONTIER_SIZE * sizeof(int)));
     CHECK(cudaMalloc(&currentFrontierSize_d, sizeof(int)));
     CHECK(cudaMalloc(&distances_d, num_rows * sizeof(int)));
-    CHECK(cudaMalloc(&rowPointers_d, num_rows * sizeof(int)));
-    //CHECK(cudaMalloc(&destinations_d, num_vals * sizeof(int)));
 
     // initialize
     int initialDistances[num_rows];
@@ -136,7 +136,7 @@ void BFS_parallel(const int source, const int* rowPointers, const int* destinati
     int initialFrontierSize = 1;
     CHECK(cudaMemcpy(currentFrontier_d, &source, sizeof(int), cudaMemcpyHostToDevice));
     CHECK(cudaMemcpy(currentFrontierSize_d, &initialFrontierSize, sizeof(int), cudaMemcpyHostToDevice));
-    CHECK(cudaMemcpy(rowPointers_d, rowPointers, num_rows * sizeof(int), cudaMemcpyHostToDevice));
+    CHECK(cudaMemcpyToSymbol(rowPointers_constant, rowPointers, num_rows * sizeof(int)));
     CHECK(cudaMemcpyToSymbol(destinations_constant, destinations, num_vals * sizeof(int))); // copy to constant memory
 
 
@@ -145,13 +145,10 @@ void BFS_parallel(const int source, const int* rowPointers, const int* destinati
         int grid_Dim = (initialFrontierSize + block_Dim - 1) / block_Dim;
         int sharedMemSize = block_Dim * sizeof(int);
 
-
         // launch the kernel
-        BFS_CUDA<<<grid_Dim, block_Dim, sharedMemSize>>>(rowPointers_d, distances_d,
-                                                       currentFrontier_d, currentFrontierSize_d,
-                                                       initialFrontierSize, MAX_FRONTIER_SIZE);
+        BFS_CUDA<<<grid_Dim, block_Dim, sharedMemSize>>>(distances_d, currentFrontier_d,
+                                                         currentFrontierSize_d,initialFrontierSize);
         CHECK_KERNELCALL();
-
 
         // updates frontier dimensions
         CHECK(cudaMemcpy(&initialFrontierSize, currentFrontierSize_d, sizeof(int), cudaMemcpyDeviceToHost));
@@ -168,8 +165,6 @@ void BFS_parallel(const int source, const int* rowPointers, const int* destinati
     cudaFree(currentFrontier_d);
     cudaFree(currentFrontierSize_d);
     cudaFree(distances_d);
-    cudaFree(rowPointers_d);
-    // cudaFree(destinations_d);
 }
 
 
@@ -194,6 +189,8 @@ int main(int argc, char *argv[]) {
         printf("Matrix is too big");
         return 0;
     }
+
+    cudaDeviceSetLimit(cudaLimitMallocHeapSize, 128 * 1024 * 1024);
 
     // Initialize dist to -1
     std::vector<int> dist(num_rows); //before it was num_vals
