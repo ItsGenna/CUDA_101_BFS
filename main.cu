@@ -33,16 +33,13 @@
 
 __constant__ int destinations_constant[MAX_MATRIX_LENGTH];
 __constant__ int rowPointers_constant[MAX_MATRIX_LENGTH];
+__device__ int globalCounter;
 
 
-
-__global__ void BFS_CUDA(int* distances_d, int* currentFrontier_d, int* currentFrontierSize_d, int dim) {
-    extern __shared__ int shared_frontier[];  // extern because the dimension is defined in the kernel call
-    __shared__ int shared_frontier_size;
-
-    // initialize shared frontier size
+__global__ void BFS_CUDA(int* distances_d, int* currentFrontier_d, int* currentFrontierSize_d, int dim, int currentDistance) {
+    // reset global counter
     if (threadIdx.x == 0) {
-        shared_frontier_size = 0;
+        globalCounter = 0;
     }
 
     __syncthreads();
@@ -50,49 +47,27 @@ __global__ void BFS_CUDA(int* distances_d, int* currentFrontier_d, int* currentF
     unsigned int i = threadIdx.x + blockIdx.x * blockDim.x;
 
     if (i < dim) {
-        // get current vertex
-        int currentVertex = currentFrontier_d[i];
-        // printf("Thread %d processing vertex %d\n", i, currentVertex); //debugging function
-
-        // get start and end of the destinations
+        int currentVertex = destinations_constant[i];
+        printf("\nCurrent distance: %d, Current vertex: %d", currentDistance, currentVertex);
         int start = rowPointers_constant[currentVertex];
         int end = rowPointers_constant[currentVertex + 1];
 
-        for (int j = start; j < end; ++j) {
-            int neighbor = destinations_constant[j];
-            // printf("Thread %d processing edge %d -> %d, j = %d\n", i, currentVertex, neighbor, j); //debugging function
-
-            // check if it has already been visited and update the distance
-            if (atomicCAS(&distances_d[neighbor], -1, distances_d[currentVertex] + 1) == -1) {
-                // printf("Thread %d updating distance for vertex %d: %d\n", i, neighbor, distances_d[currentVertex] + 1); //debugging function
-
-                // if it is new, add neighbor to current frontier
-                int idx = atomicAdd(&shared_frontier_size, 1);
-                if (idx < MAX_FRONTIER_SIZE) {
-                    shared_frontier[idx] = neighbor;
-                    // printf("Thread %d added vertex %d to shared frontier at index %d\n", i, neighbor, idx); // debugging function
-                } else {
-                    printf("Thread %d could not add vertex %d to shared frontier (overflow)\n", i, neighbor); // check for overflow
-                }
+        // check if it has already been visited and update the distance
+        if (atomicCAS(&distances_d[currentVertex], -1, currentDistance) == -1) {
+            int count = (int)(end - start) + 1;
+            // if it hasn't been visited, we have to add it to the next iteration's frontier
+            int offset = atomicAdd(&globalCounter, count); // first we update the counter that keeps track of the size of the frontier
+            for (int j = 0; j < count; ++j) {
+                currentFrontier_d[offset + j] = start + j; // then we change the frontier itself
             }
         }
     }
 
-    __syncthreads(); // wait for all the threads to finish computations
-
-    // update global memory frontier
-    if (threadIdx.x == 0) {
-        int global_idx = atomicExch(currentFrontierSize_d, shared_frontier_size); // updates the current frontier size and returns the previous size
-        for (int j = 0; j < shared_frontier_size; ++j) {
-            if (global_idx + j < MAX_FRONTIER_SIZE) {
-                currentFrontier_d[j] = shared_frontier[j];
-                // printf("Block %d added vertex %d to global frontier at index %d\n", blockIdx.x, shared_frontier[j], j);
-            } else {
-                printf("Block %d could not add vertex %d to global frontier (overflow)\n", blockIdx.x, shared_frontier[j]); // debugging function
-            }
-        }
+    if (threadIdx.x==0){
+        *currentFrontierSize_d = globalCounter;
     }
 }
+
 
 void read_matrix(std::vector<int> &row_ptr,
                  std::vector<int> &col_ind,
@@ -138,30 +113,30 @@ void BFS_parallel(const int source, const int* rowPointers, const int* destinati
     CHECK(cudaMemcpy(currentFrontierSize_d, &initialFrontierSize, sizeof(int), cudaMemcpyHostToDevice));
     CHECK(cudaMemcpyToSymbol(rowPointers_constant, rowPointers, num_rows * sizeof(int)));
     CHECK(cudaMemcpyToSymbol(destinations_constant, destinations, num_vals * sizeof(int))); // copy to constant memory
-
+    int currentDist = 0;
 
     while (initialFrontierSize > 0) {
         int block_Dim = 256;
         int grid_Dim = (initialFrontierSize + block_Dim - 1) / block_Dim;
-        int sharedMemSize = block_Dim * sizeof(int);
 
         // launch the kernel
-        BFS_CUDA<<<grid_Dim, block_Dim, sharedMemSize>>>(distances_d, currentFrontier_d,
-                                                         currentFrontierSize_d,initialFrontierSize);
+        BFS_CUDA<<<grid_Dim, block_Dim>>>(distances_d, currentFrontier_d,
+                                                         currentFrontierSize_d,initialFrontierSize, currentDist);
         CHECK_KERNELCALL();
 
         // updates frontier dimensions
         CHECK(cudaMemcpy(&initialFrontierSize, currentFrontierSize_d, sizeof(int), cudaMemcpyDeviceToHost));
 
 
-        // Reset dimensione frontiera per il prossimo passo
+        // reset current frontier for next iteration, probably can be removed (check later)
         CHECK(cudaMemset(currentFrontierSize_d, 0, sizeof(int)));
+        currentDist ++;
     }
 
-    // Copia risultato su host
+    // copy results to host
     CHECK(cudaMemcpy(distances, distances_d, num_rows * sizeof(int), cudaMemcpyDeviceToHost));
 
-    // Libera memoria
+    // free device memory
     cudaFree(currentFrontier_d);
     cudaFree(currentFrontierSize_d);
     cudaFree(distances_d);
@@ -189,8 +164,6 @@ int main(int argc, char *argv[]) {
         printf("Matrix is too big");
         return 0;
     }
-
-    cudaDeviceSetLimit(cudaLimitMallocHeapSize, 128 * 1024 * 1024);
 
     // Initialize dist to -1
     std::vector<int> dist(num_rows); //before it was num_vals
