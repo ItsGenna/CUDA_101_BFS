@@ -11,7 +11,7 @@
 
 
 #define MAX_MATRIX_LENGTH 7500
-#define MAX_FRONTIER_SIZE 256
+#define MAX_FRONTIER_SIZE 5000
 
 #define CHECK(call)                                                                 \
   {                                                                                 \
@@ -33,38 +33,25 @@
 
 __constant__ int destinations_constant[MAX_MATRIX_LENGTH];
 __constant__ int rowPointers_constant[MAX_MATRIX_LENGTH];
-__device__ int globalCounter;
 
 
-__global__ void BFS_CUDA(int* distances_d, int* currentFrontier_d, int* currentFrontierSize_d, int dim, int currentDistance) {
-    // reset global counter
-    if (threadIdx.x == 0) {
-        globalCounter = 0;
-    }
-
-    __syncthreads();
-
+__global__ void BFS_CUDA(int* distances_d, const int* currentFrontier_d, int* nextFrontier, int* frontierSize_d, int dim, int currentDistance) {
     unsigned int i = threadIdx.x + blockIdx.x * blockDim.x;
 
     if (i < dim) {
-        int currentVertex = destinations_constant[i];
-        printf("\nCurrent distance: %d, Current vertex: %d", currentDistance, currentVertex);
+        int currentVertex = currentFrontier_d[i];
         int start = rowPointers_constant[currentVertex];
         int end = rowPointers_constant[currentVertex + 1];
 
         // check if it has already been visited and update the distance
         if (atomicCAS(&distances_d[currentVertex], -1, currentDistance) == -1) {
-            int count = (int)(end - start) + 1;
+            int count = (int)(end - start);
             // if it hasn't been visited, we have to add it to the next iteration's frontier
-            int offset = atomicAdd(&globalCounter, count); // first we update the counter that keeps track of the size of the frontier
+            int offset = atomicAdd(frontierSize_d, count); // first we update the counter that keeps track of the size of the frontier
             for (int j = 0; j < count; ++j) {
-                currentFrontier_d[offset + j] = start + j; // then we change the frontier itself
+                nextFrontier[offset + j] = destinations_constant[start+j]; // then we change the frontier itself
             }
         }
-    }
-
-    if (threadIdx.x==0){
-        *currentFrontierSize_d = globalCounter;
     }
 }
 
@@ -91,11 +78,12 @@ inline void swap(int **ptr1, int **ptr2) {
 
 void BFS_parallel(const int source, const int* rowPointers, const int* destinations,
                   int* distances, const int num_rows, int num_vals) {
-    int *currentFrontier_d, *currentFrontierSize_d;
+    int *currentFrontier_d, *currentFrontierSize_d, *nextFrontier_d;
     int *distances_d;
 
     // device memory allocation
     CHECK(cudaMalloc(&currentFrontier_d, MAX_FRONTIER_SIZE * sizeof(int)));
+    CHECK(cudaMalloc(&nextFrontier_d, MAX_FRONTIER_SIZE * sizeof(int)));
     CHECK(cudaMalloc(&currentFrontierSize_d, sizeof(int)));
     CHECK(cudaMalloc(&distances_d, num_rows * sizeof(int)));
 
@@ -106,22 +94,32 @@ void BFS_parallel(const int source, const int* rowPointers, const int* destinati
     }
     initialDistances[source] = 0;  // except the starting value, which has to be 1
 
+    // handle first iteration
+    int start_host = rowPointers[source];
+    int end_host = rowPointers[source + 1];
+    int initialFrontierSize = end_host - start_host;
+    int initialFrontier[initialFrontierSize];
+
+    for (int j = 0; j < initialFrontierSize; ++j) {
+        int neighbor = destinations[start_host + j];
+           initialFrontier[j] = neighbor;
+    }
+
     // copy to device memory
     CHECK(cudaMemcpy(distances_d, initialDistances, num_rows * sizeof(int), cudaMemcpyHostToDevice));
-    int initialFrontierSize = 1;
-    CHECK(cudaMemcpy(currentFrontier_d, &source, sizeof(int), cudaMemcpyHostToDevice));
+    CHECK(cudaMemcpy(currentFrontier_d, initialFrontier, initialFrontierSize*sizeof(int), cudaMemcpyHostToDevice));
     CHECK(cudaMemcpy(currentFrontierSize_d, &initialFrontierSize, sizeof(int), cudaMemcpyHostToDevice));
-    CHECK(cudaMemcpyToSymbol(rowPointers_constant, rowPointers, num_rows * sizeof(int)));
+    CHECK(cudaMemcpyToSymbol(rowPointers_constant, rowPointers, (num_rows+1) * sizeof(int)));
     CHECK(cudaMemcpyToSymbol(destinations_constant, destinations, num_vals * sizeof(int))); // copy to constant memory
-    int currentDist = 0;
+    int currentDist = 1;
 
     while (initialFrontierSize > 0) {
         int block_Dim = 256;
         int grid_Dim = (initialFrontierSize + block_Dim - 1) / block_Dim;
 
         // launch the kernel
-        BFS_CUDA<<<grid_Dim, block_Dim>>>(distances_d, currentFrontier_d,
-                                                         currentFrontierSize_d,initialFrontierSize, currentDist);
+        BFS_CUDA<<<grid_Dim, block_Dim>>>(distances_d, currentFrontier_d, nextFrontier_d,
+                                          currentFrontierSize_d,initialFrontierSize, currentDist);
         CHECK_KERNELCALL();
 
         // updates frontier dimensions
@@ -130,6 +128,8 @@ void BFS_parallel(const int source, const int* rowPointers, const int* destinati
 
         // reset current frontier for next iteration, probably can be removed (check later)
         CHECK(cudaMemset(currentFrontierSize_d, 0, sizeof(int)));
+        swap(&currentFrontier_d, &nextFrontier_d);
+
         currentDist ++;
     }
 
@@ -140,6 +140,7 @@ void BFS_parallel(const int source, const int* rowPointers, const int* destinati
     cudaFree(currentFrontier_d);
     cudaFree(currentFrontierSize_d);
     cudaFree(distances_d);
+    cudaFree(nextFrontier_d);
 }
 
 
