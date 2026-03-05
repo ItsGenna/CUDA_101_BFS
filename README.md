@@ -5,3 +5,5 @@ Unfortunately, the project is not completed yet, further optimizations are still
 The updated code is in "main.cu", the original for comparison is in "bfgs.cpp". The GPU code is still far from being as fast
 as the CPU version, as it can be seen from the table "BFS_time.xlsx".
 I also added two more matrices "cavity03.mtx" and "cavity04.mtx" for trying the code with different values and matrix sizes.
+
+This project is not complete as developement is still needed, although it has been paused after the end of the course.
